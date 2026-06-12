@@ -1,7 +1,7 @@
 [build]
   base      = "."
-  command   = "pnpm install && pnpm run typecheck:libs && pnpm --filter @workspace/alphavest run build"
-  publish   = "artifacts/alphavest/dist/public"
+  command   = "pnpm install && pnpm run typecheck:libs && pnpm --filter @workspace/BetterCapitalInvestment run build"
+  publish   = "artifacts/bettercapitalinvestment/dist/public"
   functions = "netlify/functions"
 
 [build.environment]
