@@ -3,7 +3,7 @@ import { InvestmentSector, InvestmentTier, Transaction } from './types';
 export const INVESTMENT_TIERS: InvestmentTier[] = [
   {
     name: 'Bronze Ore',
-    minAmount: 3000,
+    minAmount: 5000,
     maxAmount: 9999,
     dailyROI: 0.0025,
     description: 'Bronze level entry ore for establishing a strong, diversified interest stream.'

@@ -14,7 +14,7 @@ const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(n);
 
 const DEFAULT_SETTINGS: Record<string, string> = {
-  min_investment: "3000",
+  min_investment: "5000",
   early_exit_penalty: "0.05",
   maintenance_mode: "false",
   allow_new_signups: "true",
@@ -44,7 +44,7 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   tier_roi_platinum: "0.55",
   tier_roi_diamond: "0.70",
   // Tier minimum investment amounts ($)
-  tier_min_bronze: "3000",
+  tier_min_bronze: "5000",
   tier_min_silver: "10000",
   tier_min_gold: "50000",
   tier_min_platinum: "250000",

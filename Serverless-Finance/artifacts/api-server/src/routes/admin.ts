@@ -14,7 +14,7 @@ const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(n);
 
 const DEFAULT_SETTINGS: Record<string, string> = {
-  min_investment: "3000",
+  min_investment: "5000",
   early_exit_penalty: "0.05",
   maintenance_mode: "false",
   allow_new_signups: "true",

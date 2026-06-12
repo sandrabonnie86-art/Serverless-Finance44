@@ -17,7 +17,6 @@ import {
   BarChart3,
   Palette,
   Activity,
-  Fingerprint,
   Trash2,
   Loader2,
   LogOut,
@@ -31,6 +30,7 @@ import {
   UserCheck,
   FileCheck,
   Clock,
+  Fingerprint,
 } from "lucide-react";
 import MarketCharts from "./MarketCharts";
 import PaymentModal from "./PaymentModal";
@@ -130,7 +130,7 @@ export default function DashboardView({
   const [activePledgeSector, setActivePledgeSector] = useState<
     (typeof INVESTMENT_SECTORS)[0] | null
   >(null);
-  const [pledgeAmount, setPledgeAmount] = useState("3000");
+  const [pledgeAmount, setPledgeAmount] = useState("5000");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawTarget, setWithdrawTarget] = useState("External Wallet");
   const [txFilter, setTxFilter] = useState<
@@ -140,8 +140,6 @@ export default function DashboardView({
   const [withdrawInvestment, setWithdrawInvestment] = useState<string | null>(
     null,
   );
-  const [biometricLoading, setBiometricLoading] = useState(false);
-  const [biometricMsg, setBiometricMsg] = useState("");
   const [showComingSoon, setShowComingSoon] = useState<string | null>(null);
   const [kycDocs, setKycDocs] = useState<any[]>([]);
   const [kycLoading, setKycLoading] = useState(false);
@@ -149,6 +147,8 @@ export default function DashboardView({
   // Settings states
   const [profileName, setProfileName] = useState(session.fullName);
   const [profileEmail, setProfileEmail] = useState(session.email);
+  const [biometricLoading, setBiometricLoading] = useState(false);
+  const [biometricMsg, setBiometricMsg] = useState("");
 
   const qc = useQueryClient();
 
@@ -199,7 +199,7 @@ export default function DashboardView({
 
   const computedTier = useMemo(() => {
     const amt = parseFloat(pledgeAmount);
-    if (isNaN(amt) || amt < 3000) return null;
+    if (isNaN(amt) || amt < 5000) return null;
     let selected = INVESTMENT_TIERS[0];
     for (let i = INVESTMENT_TIERS.length - 1; i >= 0; i--) {
       if (amt >= INVESTMENT_TIERS[i].minAmount) {
@@ -242,8 +242,8 @@ export default function DashboardView({
   const handlePledge = (e: FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(pledgeAmount);
-    if (isNaN(amt) || amt < 3000) {
-      triggerFeedback("Minimum investment is $3,000.", false);
+    if (isNaN(amt) || amt < 5000) {
+      triggerFeedback("Minimum investment is $5,000.", false);
       return;
     }
     if (amt > liquidity) {
@@ -276,7 +276,7 @@ export default function DashboardView({
             },
           });
           setShowPledgeModal(false);
-          setPledgeAmount("3000");
+          setPledgeAmount("5000");
           setActivePledgeSector(null);
           triggerFeedback(
             `${fmt(amt)} pledged to ${activePledgeSector.title}.`,
@@ -330,8 +330,7 @@ export default function DashboardView({
         data: {
           fullName: profileName,
           theme: session.theme,
-          biometricEnabled: session.biometricEnabled,
-        },
+          },
       },
       {
         onSuccess: (data) => {
@@ -357,7 +356,6 @@ export default function DashboardView({
     try {
       const optR = await fetch("/api/auth/biometric/register-options", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         credentials: "include",
       });
       if (!optR.ok) {
@@ -1326,45 +1324,6 @@ export default function DashboardView({
                     {session.tier}
                   </div>
                 </div>
-                <div className="py-3 px-4 bg-brand-bg border border-brand-border rounded">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Fingerprint className="text-brand-gold w-4 h-4" />
-                      <span className="text-xs text-brand-muted font-sans">
-                        Biometric Login
-                      </span>
-                    </div>
-                    {session.biometricEnabled && (
-                      <span className="text-[10px] font-sans bg-green-900/30 border border-green-500/30 text-green-400 px-2 py-0.5 rounded">
-                        Active
-                      </span>
-                    )}
-                  </div>
-                  {biometricMsg && (
-                    <p
-                      className={`text-[11px] font-sans mb-2 leading-relaxed ${biometricMsg.startsWith("Biometric registered") ? "text-green-400" : "text-red-400"}`}
-                    >
-                      {biometricMsg}
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleBiometricRegister}
-                    disabled={biometricLoading}
-                    className="flex items-center gap-2 text-xs font-sans border border-brand-border text-brand-muted hover:border-brand-gold/40 hover:text-brand-gold px-3 py-2 rounded transition-colors disabled:opacity-60"
-                  >
-                    {biometricLoading ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Fingerprint className="w-3.5 h-3.5" />
-                    )}
-                    {biometricLoading
-                      ? "Registering..."
-                      : session.biometricEnabled
-                        ? "Re-register Biometric"
-                        : "Register Biometric"}
-                  </button>
-                </div>
                 <button
                   type="submit"
                   disabled={updateProfile.isPending}
@@ -1432,11 +1391,6 @@ export default function DashboardView({
                       icon: FileCheck,
                       label: "Identity Document Submitted",
                       done: kycDocs.some((d) => d.status === "approved"),
-                    },
-                    {
-                      icon: ShieldCheck,
-                      label: "Biometric Authentication",
-                      done: !!session.biometricEnabled,
                     },
                   ].map((item) => (
                     <div
@@ -1557,7 +1511,48 @@ export default function DashboardView({
                   Security
                 </h3>
               </div>
-              <div className="p-6">
+              <div className="p-6 space-y-4">
+                {/* Biometric Authentication */}
+                <div className="bg-brand-bg border border-brand-border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Fingerprint className="text-brand-gold w-4 h-4" />
+                      <span className="text-xs text-brand-muted font-sans">
+                        Biometric Login
+                      </span>
+                    </div>
+                    {session.biometricEnabled && (
+                      <span className="text-[10px] font-sans bg-green-900/30 border border-green-500/30 text-green-400 px-2 py-0.5 rounded">
+                        Active
+                      </span>
+                    )}
+                  </div>
+                  {biometricMsg && (
+                    <p
+                      className={`text-[11px] font-sans mb-2 leading-relaxed ${biometricMsg.startsWith("Biometric registered") ? "text-green-400" : "text-red-400"}`}
+                    >
+                      {biometricMsg}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleBiometricRegister}
+                    disabled={biometricLoading}
+                    className="flex items-center gap-2 text-xs font-sans border border-brand-border text-brand-muted hover:border-brand-gold/40 hover:text-brand-gold px-3 py-2 rounded transition-colors disabled:opacity-60"
+                  >
+                    {biometricLoading ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Fingerprint className="w-3.5 h-3.5" />
+                    )}
+                    {biometricLoading
+                      ? "Registering..."
+                      : session.biometricEnabled
+                        ? "Re-register Biometric"
+                        : "Register Biometric"}
+                  </button>
+                </div>
+
                 <button
                   onClick={() => setShowLogoutConfirm(true)}
                   className="flex items-center gap-2 text-red-400 hover:text-red-300 text-sm font-sans transition-colors border border-red-400/20 hover:border-red-400/40 px-4 py-2.5 rounded"
@@ -1650,8 +1645,8 @@ export default function DashboardView({
                   </label>
                   <input
                     type="number"
-                    min="3000"
-                    placeholder="Min. $3,000"
+                    min="5000"
+                    placeholder="Min. $5,000"
                     value={pledgeAmount}
                     onChange={(e) => setPledgeAmount(e.target.value)}
                     className="w-full bg-brand-bg border border-brand-border py-3 px-4 text-brand-text text-sm focus:border-brand-gold focus:outline-none rounded font-sans"

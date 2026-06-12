@@ -8,7 +8,7 @@ export interface UserSession {
   fullName: string;
   email: string;
   isLoggedIn: boolean;
-  biometricEnabled: boolean;
+  biometricEnabled: boolean; // Now used for push notification status
   tier: string;
   theme: ColorThemeType;
   isAdmin?: boolean;

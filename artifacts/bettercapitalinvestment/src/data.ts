@@ -3,7 +3,7 @@ import { InvestmentSector, InvestmentTier, Transaction } from './types';
 export const INVESTMENT_TIERS: InvestmentTier[] = [
   {
     name: 'Classic',
-    minAmount: 3000,
+    minAmount: 5000,
     maxAmount: 24999,
     dailyROI: 0.0025,
     description: 'Entry-level tier for establishing a strong, diversified interest stream with steady growth.'
