@@ -90,13 +90,53 @@ export default function PaymentModal({ onClose, onSuccess }: PaymentModalProps) 
       });
       const data = await r.json();
       if (!r.ok) { setError(data.message ?? 'Failed to initialize'); setLoading(false); return; }
-      if (data.checkoutUrl) window.open(data.checkoutUrl, '_blank');
+      
+      if (data.checkoutUrl) {
+        window.open(data.checkoutUrl, '_blank');
+        
+        // FIX 3: Start polling for Monnify payment completion
+        if (provider === 'monnify' && data.reference) {
+          startMonnifyPolling(data.reference);
+        }
+      }
+      
       onClose();
     } catch {
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const startMonnifyPolling = (reference: string) => {
+    let pollCount = 0;
+    const maxPolls = 60; // Poll for max 3 minutes (60 * 3 seconds)
+    
+    const pollInterval = setInterval(async () => {
+      pollCount++;
+      
+      try {
+        const r = await fetch(`/api/payments/monnify/verify?reference=${reference}`, {
+          credentials: 'include',
+        });
+        
+        if (r.ok) {
+          const data = await r.json();
+          
+          if (data.status === 'success') {
+            clearInterval(pollInterval);
+            onSuccess();
+          }
+        }
+      } catch (err) {
+        // Continue polling on errors
+      }
+      
+      // Stop polling after max attempts
+      if (pollCount >= maxPolls) {
+        clearInterval(pollInterval);
+      }
+    }, 3000); // Poll every 3 seconds
   };
 
   const handleCryptoSubmit = async (e: FormEvent) => {

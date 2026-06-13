@@ -30,13 +30,11 @@ import {
   UserCheck,
   FileCheck,
   Clock,
-  Fingerprint,
 } from "lucide-react";
 import MarketCharts from "./MarketCharts";
 import PaymentModal from "./PaymentModal";
 import WithdrawModal from "./WithdrawModal";
 import KycModal from "./KycModal";
-import { startRegistration } from "@simplewebauthn/browser";
 import {
   useGetMe,
   useGetInvestments,
@@ -147,8 +145,6 @@ export default function DashboardView({
   // Settings states
   const [profileName, setProfileName] = useState(session.fullName);
   const [profileEmail, setProfileEmail] = useState(session.email);
-  const [biometricLoading, setBiometricLoading] = useState(false);
-  const [biometricMsg, setBiometricMsg] = useState("");
 
   const qc = useQueryClient();
 
@@ -348,50 +344,6 @@ export default function DashboardView({
       onSuccess: () => onLogout(),
       onError: () => onLogout(),
     });
-  };
-
-  const handleBiometricRegister = async () => {
-    setBiometricLoading(true);
-    setBiometricMsg("");
-    try {
-      const optR = await fetch("/api/auth/biometric/register-options", {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!optR.ok) {
-        setBiometricMsg("Failed to start registration.");
-        setBiometricLoading(false);
-        return;
-      }
-      const options = await optR.json();
-      const response = await startRegistration({ optionsJSON: options });
-      const verifyR = await fetch("/api/auth/biometric/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(response),
-        credentials: "include",
-      });
-      const data = await verifyR.json();
-      if (!verifyR.ok) {
-        setBiometricMsg(data.message ?? "Registration failed.");
-        setBiometricLoading(false);
-        return;
-      }
-      onUpdateSession?.({ biometricEnabled: true });
-      setBiometricMsg(
-        "Biometric registered! You can now sign in with your fingerprint or Face ID.",
-      );
-      triggerFeedback("Biometric authentication enabled.");
-    } catch (err) {
-      if (err instanceof Error && err.name === "NotAllowedError") {
-        setBiometricMsg("Registration was cancelled.");
-      } else {
-        setBiometricMsg(
-          "Biometric registration failed. This device may not support it.",
-        );
-      }
-    }
-    setBiometricLoading(false);
   };
 
   const filteredTx = useMemo(() => {
@@ -1512,47 +1464,6 @@ export default function DashboardView({
                 </h3>
               </div>
               <div className="p-6 space-y-4">
-                {/* Biometric Authentication */}
-                <div className="bg-brand-bg border border-brand-border rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Fingerprint className="text-brand-gold w-4 h-4" />
-                      <span className="text-xs text-brand-muted font-sans">
-                        Biometric Login
-                      </span>
-                    </div>
-                    {session.biometricEnabled && (
-                      <span className="text-[10px] font-sans bg-green-900/30 border border-green-500/30 text-green-400 px-2 py-0.5 rounded">
-                        Active
-                      </span>
-                    )}
-                  </div>
-                  {biometricMsg && (
-                    <p
-                      className={`text-[11px] font-sans mb-2 leading-relaxed ${biometricMsg.startsWith("Biometric registered") ? "text-green-400" : "text-red-400"}`}
-                    >
-                      {biometricMsg}
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleBiometricRegister}
-                    disabled={biometricLoading}
-                    className="flex items-center gap-2 text-xs font-sans border border-brand-border text-brand-muted hover:border-brand-gold/40 hover:text-brand-gold px-3 py-2 rounded transition-colors disabled:opacity-60"
-                  >
-                    {biometricLoading ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Fingerprint className="w-3.5 h-3.5" />
-                    )}
-                    {biometricLoading
-                      ? "Registering..."
-                      : session.biometricEnabled
-                        ? "Re-register Biometric"
-                        : "Register Biometric"}
-                  </button>
-                </div>
-
                 <button
                   onClick={() => setShowLogoutConfirm(true)}
                   className="flex items-center gap-2 text-red-400 hover:text-red-300 text-sm font-sans transition-colors border border-red-400/20 hover:border-red-400/40 px-4 py-2.5 rounded"

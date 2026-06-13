@@ -1,9 +1,8 @@
 ﻿import { useState, FormEvent } from 'react';
-import { Lock, Loader2, ArrowLeft, Eye, EyeOff, Fingerprint } from 'lucide-react';
+import { Lock, Loader2, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { ScreenType } from '../types';
 import LogoIcon from './LogoIcon';
 import { useLogin } from '@workspace/api-client-react';
-import { startAuthentication } from '@simplewebauthn/browser';
 import LegalModal from './LegalModal';
 
 interface LoginViewProps {
@@ -16,9 +15,6 @@ export default function LoginView({ onNavigate, onLoginSuccess }: LoginViewProps
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorText, setErrorText] = useState('');
-  const [biometricEmail, setBiometricEmail] = useState('');
-  const [showBiometricModal, setShowBiometricModal] = useState(false);
-  const [biometricLoading, setBiometricLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null);
 
@@ -67,53 +63,6 @@ export default function LoginView({ onNavigate, onLoginSuccess }: LoginViewProps
       setErrorText('Google sign-in unavailable. Please try again.');
       setGoogleLoading(false);
     }
-  };
-
-  const handleBiometricLogin = async () => {
-    if (!biometricEmail.trim()) { setErrorText('Enter your email first.'); return; }
-    setBiometricLoading(true);
-    setErrorText('');
-    try {
-      const optR = await fetch('/api/auth/biometric/login-options', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: biometricEmail }),
-        credentials: 'include',
-      });
-      if (!optR.ok) {
-        const d = await optR.json();
-        setErrorText(d.message ?? 'Biometric login not set up for this account.');
-        setShowBiometricModal(false);
-        setBiometricLoading(false);
-        return;
-      }
-      const options = await optR.json();
-      const response = await startAuthentication({ optionsJSON: options });
-      const verifyR = await fetch('/api/auth/biometric/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(response),
-        credentials: 'include',
-      });
-      const data = await verifyR.json();
-      if (!verifyR.ok) { setErrorText(data.message ?? 'Biometric verification failed.'); setBiometricLoading(false); setShowBiometricModal(false); return; }
-      setShowBiometricModal(false);
-      onLoginSuccess({
-        email: data.email,
-        fullName: data.fullName,
-        tier: data.tier,
-        theme: data.theme,
-        biometricEnabled: data.biometricEnabled,
-      });
-    } catch (err) {
-      if (err instanceof Error && err.name === 'NotAllowedError') {
-        setErrorText('Biometric authentication was cancelled.');
-      } else {
-        setErrorText('Biometric login failed. Please use your password.');
-      }
-      setShowBiometricModal(false);
-    }
-    setBiometricLoading(false);
   };
 
   return (
@@ -220,16 +169,6 @@ export default function LoginView({ onNavigate, onLoginSuccess }: LoginViewProps
                 </button>
               </form>
 
-              {/* Biometric Login */}
-              <button
-                type="button"
-                onClick={() => { setBiometricEmail(email); setShowBiometricModal(true); }}
-                className="w-full mt-3 flex items-center justify-center gap-2 border border-brand-border/60 text-brand-muted hover:border-brand-gold/40 hover:text-brand-gold text-xs font-sans py-3 rounded-lg transition-all"
-              >
-                <Fingerprint className="w-4 h-4" />
-                Sign In with Biometrics
-              </button>
-
               <div className="mt-5 pt-4 border-t border-brand-border/40 text-center">
                 <p className="text-[11px] text-brand-muted font-sans mb-3">Don't have an account?</p>
                 <button onClick={() => onNavigate('signup')} className="w-full border border-brand-border text-brand-text font-sans font-semibold text-xs py-3 rounded-lg hover:border-brand-gold hover:text-brand-gold transition-all tracking-widest uppercase">
@@ -249,38 +188,6 @@ export default function LoginView({ onNavigate, onLoginSuccess }: LoginViewProps
           </div>
         </div>
       </main>
-
-      {/* Biometric Modal */}
-      {showBiometricModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
-          <div className="bg-brand-surface border border-brand-border rounded-t-2xl sm:rounded-xl shadow-2xl w-full sm:max-w-sm overflow-hidden sheet-up sm:animate-none">
-            <div className="h-[2px] bg-brand-gold" />
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg text-brand-text font-serif flex items-center gap-2">
-                  <Fingerprint className="w-5 h-5 text-brand-gold" /> Biometric Sign In
-                </h3>
-                <button onClick={() => setShowBiometricModal(false)} className="text-brand-muted hover:text-brand-gold text-xl leading-none px-1 py-1">×</button>
-              </div>
-              <p className="text-xs text-brand-muted font-sans mb-4 leading-relaxed">Confirm your email to use your device biometric (fingerprint or Face ID).</p>
-              <input
-                type="email"
-                placeholder="your.email@example.com"
-                value={biometricEmail}
-                onChange={e => setBiometricEmail(e.target.value)}
-                className="w-full bg-brand-bg border border-brand-border py-3 px-4 text-brand-text placeholder-brand-muted/30 focus:border-brand-gold focus:outline-none rounded-lg font-sans mb-4"
-              />
-              <button
-                onClick={handleBiometricLogin}
-                disabled={biometricLoading}
-                className="w-full bg-brand-gold text-brand-bg font-sans font-bold text-xs py-3.5 rounded-lg hover:brightness-110 transition-all tracking-widest uppercase flex items-center justify-center gap-2 disabled:opacity-70"
-              >
-                {biometricLoading ? <><Loader2 className="animate-spin w-4 h-4" /><span>Verifying...</span></> : <><Fingerprint className="w-4 h-4" /><span>Authenticate</span></>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {legalModal && (
         <LegalModal type={legalModal} onClose={() => setLegalModal(null)} />

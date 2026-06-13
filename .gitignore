@@ -47,3 +47,39 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+
+Refund Completion	https://alphavest.space/api/payments/monnify/webhook
+Disbursement	https://alphavest.space/api/payments/monnify/webhook
+Settlement	https://alphavest.space/api/payments/monnify/webhook
+Mandate	https://alphavest.space/api/payments/monnify/webhook
+Wallet Activity Notification	https://alphavest.space/api/payments/monnify/webhook
+Low Balance Notification	https://alphavest.space/api/payments/monnify/webhook
+
+
+
+
+
+
+
+
+
+https://alphavest.space/api/payments/monnify/webhook
+
+
+
+curl -i -X POST https://sandbox.monnify.com/api/v1/merchant/transactions/init-transaction \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Basic <BASE64_API_KEY:SECRET_KEY>" \
+  -d '{
+    "amount": 100.00,
+    "customerName": "Test User",
+    "customerEmail": "test@example.com",
+    "paymentReference": "diag_'$(date +%s)'",
+    "paymentDescription": "Diagnostic test",
+    "currencyCode": "NGN",
+    "contractCode": "1755879479",
+    "redirectUrl": "https://alphavest.space/api/payments/monnify/webhook",
+    "paymentMethods": ["CARD"]
+  }'
+

@@ -87,7 +87,17 @@ router.post("/payments/monnify/initialize", async (req: Request, res: Response) 
     const amountNGN = Math.round(amount * usdToNgn);
     req.log.info({ amountUSD: amount, amountNGN, rate: usdToNgn }, "Currency conversion for Monnify");
     
-    const token = await monnifyToken();
+    // FIX 2: Defensive token handling
+    let token: string;
+    try {
+      token = await monnifyToken();
+      if (!token) throw new Error("Empty token");
+    } catch (err) {
+      req.log.error({ err }, "Monnify auth failed");
+      res.status(503).json({ message: "Payment provider unavailable" });
+      return;
+    }
+    
     const baseUrl = process.env.MONNIFY_BASE_URL ?? "https://sandbox.monnify.com";
     const reference = `av_monnify_${Date.now()}_${userId}`;
 
@@ -101,7 +111,7 @@ router.post("/payments/monnify/initialize", async (req: Request, res: Response) 
         paymentDescription: "Beta Capital Investment Deposit",
         currencyCode: "NGN",
         contractCode: process.env.MONNIFY_CONTRACT_CODE,
-        redirectUrl: `${process.env.FRONTEND_URL ?? ""}?deposit=success`,
+        redirectUrl: `${process.env.FRONTEND_URL}/payment/callback`, // FIX 1: Match whitelist
         paymentMethods: ["CARD", "ACCOUNT_TRANSFER"],
       },
       { headers: { Authorization: `Bearer ${token}` } },
@@ -121,7 +131,13 @@ router.post("/payments/monnify/initialize", async (req: Request, res: Response) 
     });
 
     req.log.info({ paymentId: payId, reference, amountUSD: amount, amountNGN }, "Monnify payment initialized successfully");
-    res.json({ checkoutUrl: resp.data.responseBody.checkoutUrl, reference, paymentId: payId });
+    // FIX 3: Return full response data for frontend
+    res.json({
+      checkoutUrl: resp.data.responseBody.checkoutUrl,
+      reference,
+      paymentId: payId,
+      transactionReference: resp.data.responseBody.transactionReference,
+    });
   } catch (err: unknown) {
     const errorDetails = err instanceof Error ? {
       message: err.message,
@@ -153,12 +169,32 @@ router.post("/payments/monnify/webhook", async (req: Request, res: Response) => 
   }
 
   const payload = req.body;
-  if (payload.paymentStatus !== "PAID") { res.json({ message: "ignored" }); return; }
+  req.log.info({ payload }, "Monnify webhook received");
+  
+  // Accept both PAID and paid (case insensitive)
+  const isPaid = payload.paymentStatus?.toUpperCase() === "PAID";
+  if (!isPaid) {
+    req.log.info({ status: payload.paymentStatus }, "Monnify webhook ignored - not paid");
+    res.json({ message: "ignored" });
+    return;
+  }
 
   const reference = payload.paymentReference;
   const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.referenceId, reference)).limit(1);
-  if (!payment || payment.status === "success") { res.json({ message: "already processed" }); return; }
+  
+  if (!payment) {
+    req.log.warn({ reference }, "Monnify webhook - payment not found");
+    res.json({ message: "not found" });
+    return;
+  }
+  
+  if (payment.status === "success") {
+    req.log.info({ reference }, "Monnify webhook - already processed");
+    res.json({ message: "already processed" });
+    return;
+  }
 
+  // Mark as success (use 'success' not 'paid' to match schema)
   await db.update(paymentsTable).set({ status: "success" }).where(eq(paymentsTable.id, payment.id));
   await creditUser(payment.userId, payment.amount, "Monnify Bank Transfer", "Bank Deposit");
 
@@ -170,7 +206,37 @@ router.post("/payments/monnify/webhook", async (req: Request, res: Response) => 
     read: false, type: "success",
   });
 
+  req.log.info({ reference, userId: payment.userId, amount: payment.amount }, "Monnify payment processed successfully");
   res.json({ message: "processed" });
+});
+
+// FIX 3: Add verification endpoint for polling
+router.get("/payments/monnify/verify", async (req: Request, res: Response) => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+
+  const { reference } = req.query;
+  if (!reference) {
+    res.status(400).json({ message: "reference required" });
+    return;
+  }
+
+  const [payment] = await db
+    .select()
+    .from(paymentsTable)
+    .where(eq(paymentsTable.referenceId, String(reference)))
+    .limit(1);
+
+  if (!payment) {
+    res.status(404).json({ message: "not found" });
+    return;
+  }
+
+  res.json({
+    status: payment.status,
+    amount: payment.amount,
+    currency: payment.currency,
+  });
 });
 
 // ─── PAYSTACK ──────────────────────────────────────────────────────────────────
@@ -183,27 +249,42 @@ router.post("/payments/paystack/initialize", async (req: Request, res: Response)
   if (enabled === "false") { res.status(503).json({ message: "Paystack is currently disabled" }); return; }
   if (!process.env.PAYSTACK_SECRET_KEY) { res.status(503).json({ message: "Paystack not configured" }); return; }
 
-  const { amount } = req.body;
+  const { amount } = req.body; // amount in USD
   if (!amount || amount <= 0) { res.status(400).json({ message: "Valid amount required" }); return; }
 
   try {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
     
-    req.log.info({ userId, amount, provider: "paystack" }, "Initializing Paystack payment");
+    req.log.info({ userId, amountUSD: amount, provider: "paystack" }, "Initializing Paystack payment");
+    
+    // Get current USD to NGN exchange rate (same as Monnify)
+    let usdToNgn = 1650; // Default fallback rate
+    try {
+      const forexResp = await axios.get("https://open.er-api.com/v6/latest/USD", { timeout: 5000 });
+      if (forexResp.data?.rates?.NGN) {
+        usdToNgn = forexResp.data.rates.NGN;
+      }
+    } catch (err) {
+      req.log.warn("Failed to fetch live forex rate, using fallback");
+    }
+    
+    // Convert USD to NGN
+    const amountNGN = Math.round(amount * usdToNgn);
+    req.log.info({ amountUSD: amount, amountNGN, rate: usdToNgn }, "Currency conversion for Paystack");
     
     const reference = `av_pstk_${Date.now()}_${userId}`;
-    // Paystack amount is in kobo (NGN) or USD cents — we'll use USD cents
-    const amountCents = Math.round(amount * 100);
+    // Paystack amount is in kobo (NGN cents), so multiply by 100
+    const amountKobo = amountNGN * 100;
 
     const resp = await axios.post(
       "https://api.paystack.co/transaction/initialize",
       {
         email: user.email,
-        amount: amountCents,
+        amount: amountKobo, // Send kobo amount (NGN cents)
         reference,
-        currency: "USD",
+        currency: "NGN", // Changed to NGN
         callback_url: `${process.env.FRONTEND_URL ?? ""}?deposit=success`,
-        metadata: { userId, fullName: user.fullName },
+        metadata: { userId, fullName: user.fullName, amountUSD: amount },
       },
       { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`, "Content-Type": "application/json" } },
     );
@@ -211,11 +292,17 @@ router.post("/payments/paystack/initialize", async (req: Request, res: Response)
     const payId = genId();
     await db.insert(paymentsTable).values({
       id: payId, userId, provider: "paystack", referenceId: reference,
-      amount, currency: "USD", status: "pending",
-      metadata: JSON.stringify(resp.data.data),
+      amount, // Store original USD amount
+      currency: "USD", // Store as USD in database
+      status: "pending",
+      metadata: JSON.stringify({ 
+        ...resp.data.data,
+        amountNGN,
+        exchangeRate: usdToNgn,
+      }),
     });
 
-    req.log.info({ paymentId: payId, reference }, "Paystack payment initialized successfully");
+    req.log.info({ paymentId: payId, reference, amountUSD: amount, amountNGN }, "Paystack payment initialized successfully");
     res.json({ checkoutUrl: resp.data.data?.authorization_url, reference, paymentId: payId });
   } catch (err: unknown) {
     const errorDetails = err instanceof Error ? {
